@@ -1,0 +1,112 @@
+---
+# template: 1.1.1
+name: "SAST / TFSec"
+
+env:
+  DEV_CICD_DEBUG: ""
+  BL64_LIB_CICD: "YES"
+  DEV_TEST_BASH_RUNNER_ENVIRONMENT: "ON"
+---
+# template: 1.6.0
+name: "SAST/TFSec"
+
+env:
+  DEV_CICD_DEBUG: ${{ vars.DEV_CICD_DEBUG || 'NONE' }}
+  DEV_CICD_DEBUG_BASH: ${{ vars.DEV_CICD_DEBUG_BASH || '' }}
+  BL64_LIB_CICD: ${{ vars.BL64_LIB_CICD || 'YES' }}
+  DEV_TEST_BASH_RUNNER_ENVIRONMENT: ${{ vars.DEV_TEST_BASH_RUNNER_ENVIRONMENT || 'ON' }}
+
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "feature/**"
+      - "release/**"
+    paths:
+      - "src/**"
+
+jobs:
+  sast-tfsec:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out repository code"
+        uses: "actions/checkout@main"
+
+      - name: "Cache base tools"
+        uses: "actions/cache@v5"
+        with:
+          path: |
+            ./lib/bl64
+            ./lib/inst64
+          key: "dev-tools"
+
+      - name: "Cache module tools"
+        uses: "actions/cache@v5"
+        with:
+          path: |
+            ./lib/tfsec
+          key: "dev-tfsec"
+
+      - name: "Download tools"
+        run: |
+          ./bin/dev-lib-base &&
+          ./bin/dev-lib-opentofu &&
+          ./bin/dev-lib-tfsec
+
+      - name: "Prepare for testing"
+        run: "./bin/dev-build-opentofu"
+
+      - name: "Run Lint"
+        run: "./bin/dev-sast-tfsec"
+
+      - name: "Save report as repository artifact"
+        uses: actions/upload-artifact@v6
+        continue-on-error: true
+        if: always()
+        with:
+          name: "tfsec-sast.sarif"
+          path: "./logs/tfsec/tfsec-sast.sarif"
+...
+on:
+  pull_request:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "feature/**"
+    paths:
+      - "src/**"
+
+jobs:
+  sast-tfsec:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out repository code"
+        uses: "actions/checkout@main"
+
+      - name: "Cache local tools"
+        uses: "actions/cache@v4"
+        with:
+          path: ./lib
+          key: ${{ runner.os }}-lib-cache
+          restore-keys: |
+            ${{ runner.os }}-lib-cache
+
+      - name: "Prepare environment"
+        run: "./bin/dev-lib-base"
+
+      - name: "Download tools"
+        run: |
+          ./bin/dev-lib-opentofu
+          ./bin/dev-lib-tfsec
+
+      - name: "Prepare for testing"
+        run: "./bin/dev-build-opentofu"
+
+      - name: "Run Lint"
+        run: "./bin/dev-sast-tfsec"
+...

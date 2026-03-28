@@ -1,0 +1,17 @@
+---
+#
+# TFSec / Configuration
+#
+# * Version: 1.0.0
+# * Template: 1.0.0
+#
+
+#
+# Project settings
+#
+
+exclude:
+  - google-gke-enable-auto-upgrade # architectural decision
+  - google-gke-enable-network-policy # false positive
+  - google-gke-enforce-pod-security-policy # architectural decision
+  - google-gke-use-cluster-labels # false positive
