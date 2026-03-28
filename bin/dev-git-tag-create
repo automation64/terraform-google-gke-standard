@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# template-task: 1.9.0
+#######################################
+# Copyright SerDigital64 - https://github.com/serdigital64
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#######################################
+
+source ./bin/dev-set || { echo 'dev-set:Error: unable to load dev environment' 2>&1 && exit 1; }
+source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-rxtx.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-api.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-vcs.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-fs.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-txt.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-xsv.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-fmt.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-module-bsh.bash" &&
+  source "${DEV_LIB_BASHLIB64_TARGET}/bashlib64-core.bash" || exit 1
+source ./bin/dev-env-git || exit 1
+
+declare MY_TAG="${1:-}"
+declare MY_CHANGELOG_ADD="${2:-OFF}"
+
+function my_create() {
+  bl64_dbg_app_show_function
+  local message=''
+  local -i status=0
+
+  bl64_msg_show_task "switch to main branch (${DEV_GIT_BRANCH_MAIN})"
+  bl64_vcs_run_git checkout "$DEV_GIT_BRANCH_MAIN" ||
+    return $?
+
+  bl64_msg_show_task "create tag (${MY_TAG})"
+  if bl64_lib_flag_is_enabled "$MY_CHANGELOG_ADD"; then
+    message="$(bl64_fs_create_tmpfile)" &&
+      bl64_vcs_changelog_get_release "$DEV_BASE_CHANGELOG" "$MY_TAG" >"$message"
+
+    [[ ! -s "$message" ]] &&
+      bl64_msg_show_error 'Unable to extract changelog for the requested tag' && status=1
+
+    ((status == 0)) && git tag "$MY_TAG" --file "$message" || status=1
+    bl64_fs_rm_tmpfile "$message"
+    ((status != 0)) && return $status
+  else
+    bl64_vcs_run_git tag "$MY_TAG" ||
+      return $?
+  fi
+
+  bl64_msg_show_task "push tag to origin (${DEV_GIT_REMOTE_ORIGIN})"
+  bl64_vcs_run_git push "$DEV_GIT_REMOTE_ORIGIN" "$MY_TAG" ||
+    return $?
+
+  if bl64_lib_flag_is_enabled "$DEV_GIT_REMOTE_UPSTREAM_ENABLED"; then
+    bl64_msg_show_task "push tag to upstream (${DEV_GIT_REMOTE_UPSTREAM})"
+    bl64_vcs_run_git push "$DEV_GIT_REMOTE_UPSTREAM" "$MY_TAG"
+  fi
+}
+
+function my_initialize() {
+  bl64_dbg_app_show_function
+  dev_bin64_task_initialize &&
+    bl64_check_parameter 'MY_TAG' || return $?
+  if bl64_lib_flag_is_enabled "$MY_CHANGELOG_ADD"; then
+    bl64_check_file "$(pwd)/${DEV_BASE_CHANGELOG}" ||
+      return $?
+  fi
+
+  dev_bin64_task_show_setup \
+    'DEV_GIT_BRANCH_MAIN' \
+    'DEV_GIT_REMOTE_ORIGIN' \
+    'DEV_GIT_REMOTE_UPSTREAM_ENABLED' \
+    'DEV_GIT_REMOTE_UPSTREAM' \
+    'MY_TAG' \
+    'MY_CHANGELOG_ADD' \
+    'DEV_BASE_CHANGELOG'
+}
+
+bl64_lib_script_version_set '2.2.2'
+bl64_msg_help_about_set 'Create and push GIT tag to local, origin and upstream'
+dev_bin64_initialize && my_initialize || exit $?
+
+bl64_msg_show_batch_start "$BL64_SCRIPT_ID"
+my_create
+bl64_msg_show_batch_finish $? "$BL64_SCRIPT_ID"

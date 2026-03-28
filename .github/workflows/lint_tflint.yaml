@@ -1,0 +1,56 @@
+---
+# template: 1.5.0
+name: "Lint/TFLint"
+
+env:
+  DEV_CICD_DEBUG: ${{ vars.DEV_CICD_DEBUG || 'NONE' }}
+  DEV_CICD_DEBUG_BASH: ${{ vars.DEV_CICD_DEBUG_BASH || '' }}
+  BL64_LIB_CICD: ${{ vars.BL64_LIB_CICD || 'YES' }}
+
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "feature/**"
+      - "release/**"
+    paths:
+      - "src/**"
+
+jobs:
+  lint-tflint:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out repository code"
+        uses: "actions/checkout@main"
+
+      - name: "Cache base tools"
+        uses: "actions/cache@v5"
+        with:
+          path: |
+            ./lib/bl64
+            ./lib/inst64
+          key: "dev-tools"
+
+      - name: "Cache module tools"
+        uses: "actions/cache@v5"
+        with:
+          path: |
+            ./lib/tflint
+          key: "dev-tflint"
+
+      - name: "Download tools"
+        run: |
+          ./bin/dev-lib-base &&
+          ./bin/dev-lib-opentofu &&
+          ./bin/dev-lib-tflint
+
+      - name: "Prepare for linting"
+        run: "./bin/dev-build-opentofu"
+
+      - name: "Run Linter"
+        run: "./bin/dev-lint-tflint"
+...
